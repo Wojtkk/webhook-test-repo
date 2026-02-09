@@ -10,7 +10,6 @@ from order_repository import (
 )
 from product_repository import find_product_by_id, update_stock
 from user_repository import find_user_by_id
-from analytics import track_event
 
 
 def create_order(user_id: str, items: List[dict], currency: str = "USD") -> dict:
@@ -29,7 +28,6 @@ def create_order(user_id: str, items: List[dict], currency: str = "USD") -> dict
     order = create_order_model(user_id, items, currency)
     created = create_order_record(order)
     reserve_order_stock(created)
-    track_event("order_created", {"order_id": created["id"], "total": created["total"]}, user_id)
     return format_response(created)
 
 
@@ -65,7 +63,6 @@ def cancel_order(order_id: str, user_id: str) -> dict:
     if not updated:
         return format_error("INVALID_STATE", "Cannot cancel in current state")
     release_order_stock(order)
-    track_event("order_cancelled", {"order_id": order_id}, user_id)
     return format_response(updated)
 
 
@@ -106,7 +103,6 @@ def process_refund(order_id: str, reason: str) -> dict:
         return format_error("INVALID_STATE", "Cannot refund in current state")
     release_order_stock(order)
     amount = calculate_order_total(order_id)
-    track_event("order_refunded", {"order_id": order_id, "amount": amount})
     return format_response({"refunded": amount, "reason": reason})
 
 
@@ -137,7 +133,6 @@ def apply_discount(order_id: str, code: str) -> dict:
     if not discount:
         return format_error("INVALID_CODE", "Discount code not valid")
     new_total = order.get("total", 0) * (1 - discount["percentage"] / 100)
-    track_event("discount_applied", {"order_id": order_id, "code": code})
     return format_response({"original": order["total"], "discounted": new_total, "code": code})
 
 
@@ -163,5 +158,4 @@ def submit_order(order_id: str) -> dict:
     updated = update_order_status(order_id, "pending")
     if not updated:
         return format_error("STATE_ERROR", "Cannot submit")
-    track_event("order_submitted", {"order_id": order_id})
     return format_response({"submitted": True, "order_id": order_id})

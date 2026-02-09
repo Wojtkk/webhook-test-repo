@@ -3,13 +3,11 @@ from validators import validate_email, validate_phone
 from formatters import format_response, format_error
 from utils import generate_id, sanitize_string
 from models import create_notification_model
-from analytics import track_event
 
 
 _notifications_db: Dict[str, dict] = {}
 _queue: List[dict] = []
 _templates: Dict[str, dict] = {}
-_webhook_endpoints: Dict[str, str] = {}
 
 
 def send_email(user_id: str, to_email: str, subject: str, body: str) -> dict:
@@ -18,7 +16,6 @@ def send_email(user_id: str, to_email: str, subject: str, body: str) -> dict:
     notification = create_notification_model(user_id, "email", subject, body)
     notification["to"] = to_email
     _notifications_db[notification["id"]] = notification
-    track_event("notification_sent", {"channel": "email", "user_id": user_id}, user_id)
     return format_response({"sent": True, "id": notification["id"]})
 
 
@@ -29,7 +26,6 @@ def send_sms(user_id: str, phone: str, message: str) -> dict:
     notification["to"] = phone
     notification["message"] = truncate_sms(message)
     _notifications_db[notification["id"]] = notification
-    track_event("notification_sent", {"channel": "sms", "user_id": user_id}, user_id)
     return format_response({"sent": True, "id": notification["id"]})
 
 
@@ -44,39 +40,7 @@ def send_push(user_id: str, title: str, body: str, data: Optional[dict] = None) 
     if data:
         notification["data"] = data
     _notifications_db[notification["id"]] = notification
-    track_event("notification_sent", {"channel": "push", "user_id": user_id}, user_id)
     return format_response({"sent": True, "id": notification["id"]})
-
-
-def send_webhook(user_id: str, event_type: str, payload: dict) -> dict:
-    endpoint = _webhook_endpoints.get(user_id)
-    if not endpoint:
-        return format_error("NO_ENDPOINT", "No webhook registered")
-    delivery = create_webhook_delivery(user_id, event_type, payload, endpoint)
-    result = execute_webhook(delivery)
-    track_event("webhook_sent", {"event_type": event_type, "user_id": user_id}, user_id)
-    return format_response(result)
-
-
-def create_webhook_delivery(user_id: str, event_type: str, payload: dict, endpoint: str) -> dict:
-    return {
-        "id": generate_id("whd"),
-        "user_id": user_id,
-        "event_type": event_type,
-        "payload": payload,
-        "endpoint": endpoint,
-        "status": "pending",
-    }
-
-
-def execute_webhook(delivery: dict) -> dict:
-    delivery["status"] = "delivered"
-    return {"delivered": True, "id": delivery["id"]}
-
-
-def register_webhook(user_id: str, endpoint: str) -> dict:
-    _webhook_endpoints[user_id] = sanitize_string(endpoint)
-    return format_response({"registered": True, "endpoint": endpoint})
 
 
 def queue_notification(notification: dict, priority: int = 5) -> dict:
@@ -118,8 +82,6 @@ def dispatch_notification(notification: dict) -> dict:
     if channel == "sms":
         return {"success": True}
     if channel == "push":
-        return {"success": True}
-    if channel == "webhook":
         return {"success": True}
     return {"success": False, "reason": "Unknown channel"}
 
