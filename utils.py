@@ -128,3 +128,7 @@ def safe_get(d: dict, path: str, default: Any = None) -> Any:
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
     return max(min_val, min(value, max_val))
+
+
+def lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * clamp(t, 0.0, 1.0)
