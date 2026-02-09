@@ -13,7 +13,7 @@ from payment_service import (
 )
 from notification_service import (
     send_email, send_push, list_notifications, mark_read,
-    get_unread_count,
+    get_unread_count, send_webhook, register_webhook,
 )
 from inventory_service import (
     check_availability, get_inventory_report, reorder_check,
@@ -23,6 +23,8 @@ from middleware import (
     authenticate_request, authorize_request, rate_limit_check,
     log_request, log_response, create_request_context,
 )
+from analytics import generate_report, track_event, get_session_stats
+from reporting import generate_sales_report, generate_user_activity_report, generate_conversion_report
 from formatters import format_response, format_error
 from config import get_feature_flags
 
@@ -34,6 +36,7 @@ def handle_register(request: dict) -> dict:
         request.get("email", ""),
         request.get("password", ""),
     )
+    track_event("user_registered", {"email": request.get("email", "")})
     return result
 
 
@@ -43,6 +46,7 @@ def handle_login(request: dict) -> dict:
         request.get("email", ""),
         request.get("password", ""),
     )
+    track_event("user_login", {"email": request.get("email", "")})
     return result
 
 
@@ -179,3 +183,34 @@ def handle_checkout(request: dict) -> dict:
         "invoice": invoice,
         "shipping": shipping,
     })
+
+
+def handle_analytics_dashboard(request: dict) -> dict:
+    context = create_request_context(request.get("headers", {}))
+    if not context["auth"]["authenticated"]:
+        return format_error("UNAUTHORIZED", "Login required")
+    auth_check = authorize_request(context["auth"]["user"], "admin")
+    if not auth_check["authorized"]:
+        return format_error("FORBIDDEN", "Admin access required")
+    report = generate_report()
+    sessions = get_session_stats()
+    return format_response({"report": report, "sessions": sessions})
+
+
+def handle_generate_report(request: dict) -> dict:
+    context = create_request_context(request.get("headers", {}))
+    if not context["auth"]["authenticated"]:
+        return format_error("UNAUTHORIZED", "Login required")
+    report_type = request.get("type", "activity")
+    if report_type == "sales":
+        return format_response(generate_sales_report(request.get("orders", [])))
+    if report_type == "conversion":
+        return format_response(generate_conversion_report(request.get("events", [])))
+    return format_response(generate_user_activity_report())
+
+
+def handle_register_webhook(request: dict) -> dict:
+    context = create_request_context(request.get("headers", {}))
+    if not context["auth"]["authenticated"]:
+        return format_error("UNAUTHORIZED", "Login required")
+    return register_webhook(request.get("user_id", ""), request.get("endpoint", ""))
