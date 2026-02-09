@@ -132,3 +132,9 @@ def clamp(value: float, min_val: float, max_val: float) -> float:
 
 def lerp(a: float, b: float, t: float) -> float:
     return a + (b - a) * clamp(t, 0.0, 1.0)
+
+
+def inverse_lerp(a: float, b: float, value: float) -> float:
+    if a == b:
+        return 0.0
+    return clamp((value - a) / (b - a), 0.0, 1.0)
